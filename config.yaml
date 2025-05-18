@@ -1,0 +1,11 @@
+---
+rule:
+  - Name: "Change Host"
+    Search: "localhost:8080"
+    Replace: "google.com"
+  - Name: "Change Host"
+    Search: "test.com"
+    Replace: "defektive.github.io"
+  - Name: "Change Path"
+    Search: "thisisatest"
+    Replace: "admin"

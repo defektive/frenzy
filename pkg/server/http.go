@@ -6,14 +6,27 @@ import (
 	"context"
 	"encoding/base32"
 	"fmt"
+	"github.com/defektive/frenzy/pkg/common"
+	"gopkg.in/yaml.v3"
 	"io"
 	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 )
+
+type Rules struct {
+	Rule []Rule `yaml:"rule"`
+}
+
+type Rule struct {
+	Name    string `yaml:"Name"`
+	Search  string `yaml:"Search"`
+	Replace string `yaml:"Replace"`
+}
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("new request", slog.String("method", r.Method), slog.String("url", r.URL.String()))
@@ -21,7 +34,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	req := r.Clone(context.Background())
 	req.RequestURI = ""
 
-	for _, rule := range rules {
+	for _, rule := range rules.Rule {
 		rule.ReplaceRequest(req)
 	}
 
@@ -35,7 +48,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, rule := range rules {
+	for _, rule := range rules.Rule {
 		rule.ReplaceResponse(resp)
 	}
 
@@ -60,26 +73,42 @@ func Start() {
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-var rules []Rule
+var rules Rules
 
 func init() {
-	rules = append(rules, Rule{
-		Name:    "Change host",
-		Search:  "http://localhost:8080",
-		Replace: "https://defektive.github.io",
-	})
+	rules.ReadYamlFileToRulesStruct("config.yaml")
 }
 
-type Rule struct {
-	Name    string `json:"name"`
-	Search  string `json:"search"`
-	Replace string `json:"replace"`
+func (r *Rules) ReadYamlFileToRulesStruct(file string) {
+	fileIn, err := os.ReadFile(file)
+	common.EnsureNotError(err)
+
+	err = yaml.Unmarshal(fileIn, r)
+	common.EnsureNotError(err)
 }
 
 func (r *Rule) ReplaceRequest(req *http.Request) {
+	//urlStr := fmt.Sprintf("%s://%s%s", "http", req.Host, req.URL.String())
+	//urlStr = strings.ReplaceAll(urlStr, r.Search, r.Replace)
 
-	urlStr := fmt.Sprintf("%s://%s%s", "http", req.Host, req.URL.String())
-	urlStr = strings.ReplaceAll(urlStr, r.Search, r.Replace)
+	if r.Name == "Change Host" {
+		fmt.Println("[+] Evaluating Host String")
+		fmt.Println("Incoming req.host: ", req.Host)
+		fmt.Println("r.search: ", r.Search)
+		fmt.Println("r.replace: ", r.Replace)
+		req.Host = strings.ReplaceAll(req.Host, r.Search, r.Replace)
+		fmt.Println("Outgoing req.host: ", req.Host)
+	} else if r.Name == "Change Path" {
+		fmt.Println("[+] Evaluating Path String")
+		fmt.Println("Incoming req.URL.Path: ", req.URL.Path)
+		fmt.Println("r.search: ", r.Search)
+		fmt.Println("r.replace: ", r.Replace)
+		req.URL.Path = strings.ReplaceAll(req.URL.Path, r.Search, r.Replace)
+		fmt.Println("Outgoing req.URL.Path: ", req.URL.Path)
+	}
+
+	urlStr := fmt.Sprintf("%s://%s%s", "https", req.Host, req.URL.Path)
+	fmt.Println("urlStr: ", urlStr)
 
 	parsed, err := url.Parse(urlStr)
 	if err != nil {
@@ -124,7 +153,7 @@ func (r *Rule) ReplaceResponse(resp *http.Response) {
 	urlMatch := regexp.MustCompile(`://([^/]+)`)
 
 	matches := urlMatch.FindAll(respBody, -1)
-	slog.Debug("match response", "resp", string(respBody))
+	//slog.Debug("match response", "resp", string(respBody))
 	for _, match := range matches {
 		slog.Debug("match url", "match", string(match), "replace", string(encodeDomain(match)))
 		respBody = bytes.ReplaceAll(respBody, match, encodeDomain(match))
