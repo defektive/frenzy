@@ -1,4 +1,7 @@
 ---
+serve:
+  address: "127.0.0.1"
+  port: 8080
 rule:
   - Name: "Change Host"
     Search: "localhost:8080"

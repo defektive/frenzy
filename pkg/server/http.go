@@ -16,10 +16,17 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 )
 
-type Rules struct {
-	Rule []Rule `yaml:"rule"`
+type Config struct {
+	Serve Serve  `yaml:"serve"`
+	Rule  []Rule `yaml:"rule"`
+}
+
+type Serve struct {
+	Address string `yaml:"address"`
+	Port    int    `yaml:"port"`
 }
 
 type Rule struct {
@@ -28,13 +35,30 @@ type Rule struct {
 	Replace string `yaml:"Replace"`
 }
 
+var (
+	config     Config
+	configLock = new(sync.RWMutex)
+)
+
+func init() {
+	config.LoadConfig("config.yaml")
+}
+
+func (c *Config) LoadConfig(file string) {
+	fileIn, err := os.ReadFile(file)
+	common.EnsureNotError(err)
+
+	err = yaml.Unmarshal(fileIn, c)
+	common.EnsureNotError(err)
+}
+
 func handler(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("new request", slog.String("method", r.Method), slog.String("url", r.URL.String()))
 
 	req := r.Clone(context.Background())
 	req.RequestURI = ""
 
-	for _, rule := range rules.Rule {
+	for _, rule := range config.Rule {
 		rule.ReplaceRequest(req)
 	}
 
@@ -48,7 +72,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, rule := range rules.Rule {
+	for _, rule := range config.Rule {
 		rule.ReplaceResponse(resp)
 	}
 
@@ -63,28 +87,19 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(respBody)
+}
 
+func ServeWebPages() {
+	fs := http.FileServer(http.Dir("./static"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
 }
 
 func Start() {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
+	ServeWebPages()
 	http.HandleFunc("/", handler)
-	fmt.Println("Server listening on port 8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
-}
-
-var rules Rules
-
-func init() {
-	rules.ReadYamlFileToRulesStruct("config.yaml")
-}
-
-func (r *Rules) ReadYamlFileToRulesStruct(file string) {
-	fileIn, err := os.ReadFile(file)
-	common.EnsureNotError(err)
-
-	err = yaml.Unmarshal(fileIn, r)
-	common.EnsureNotError(err)
+	fmt.Printf("Server listening on  %s:%v\n", config.Serve.Address, config.Serve.Port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%v", config.Serve.Address, config.Serve.Port), nil))
 }
 
 func (r *Rule) ReplaceRequest(req *http.Request) {
