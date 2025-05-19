@@ -2,13 +2,18 @@
 serve:
   address: "127.0.0.1"
   port: 8080
+proxy:
+  enabled: true
+  address: "127.0.0.1"
+  port: 8081
 rule:
   - Name: "Change Host"
     Search: "localhost:8080"
-    Replace: "google.com"
+    Replace: "okta.com"
   - Name: "Change Host"
     Search: "test.com"
     Replace: "defektive.github.io"
+    Proto: "https://"
   - Name: "Change Path"
     Search: "thisisatest"
     Replace: "admin"

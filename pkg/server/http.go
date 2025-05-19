@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"encoding/base32"
 	"fmt"
 	"github.com/defektive/frenzy/pkg/common"
@@ -16,29 +17,31 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 )
+
+var ProxyFlag bool
 
 type Config struct {
 	Serve Serve  `yaml:"serve"`
+	Proxy Proxy  `yaml:"proxy"`
 	Rule  []Rule `yaml:"rule"`
 }
-
 type Serve struct {
 	Address string `yaml:"address"`
 	Port    int    `yaml:"port"`
 }
-
+type Proxy struct {
+	Enabled bool   `yaml:"enabled"`
+	Address string `yaml:"address"`
+	Port    int    `yaml:"port"`
+}
 type Rule struct {
 	Name    string `yaml:"Name"`
 	Search  string `yaml:"Search"`
 	Replace string `yaml:"Replace"`
 }
 
-var (
-	config     Config
-	configLock = new(sync.RWMutex)
-)
+var config Config
 
 func init() {
 	config.LoadConfig("config.yaml")
@@ -63,6 +66,17 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpClient := &http.Client{}
+	if config.Proxy.Enabled {
+		proxyURL, _ := url.Parse("http://127.0.0.1:8081")
+		proxy := http.ProxyURL(proxyURL)
+		transport := &http.Transport{
+			Proxy: proxy,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
+		httpClient = &http.Client{Transport: transport}
+	}
 
 	slog.Debug("send request", slog.String("method", req.Method), slog.String("url", req.URL.String()))
 	resp, err := httpClient.Do(req)
@@ -96,6 +110,7 @@ func ServeWebPages() {
 
 func Start() {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
+	fmt.Printf("proxy enabled: %v\n", config.Proxy.Enabled)
 	ServeWebPages()
 	http.HandleFunc("/", handler)
 	fmt.Printf("Server listening on  %s:%v\n", config.Serve.Address, config.Serve.Port)
