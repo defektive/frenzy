@@ -2,18 +2,32 @@
 serve:
   address: "127.0.0.1"
   port: 8080
+  url: https://localhost:8080
+  secure_random: bEKywoqcMY3OvcBMDp4EFHZzzLdV3bbOdeiOb6kO3tP53qUPDUKvvDi3jP/iM2iBQLrez2VUNZ7xuY/zVUPbZA/oy6crtNymdmiIMaG7H/pGDsYzNFgGCmvhJ9fyoqHYmiyDYNIGz9akabMS6eaHK9bkXKeu0CuRC3sC7PImMOg=
+
 proxy:
   enabled: true
   address: "127.0.0.1"
   port: 8081
+
 rule:
-  - Name: "Change Host"
-    Search: "localhost:8080"
-    Replace: "okta.com"
-  - Name: "Change Host"
-    Search: "test.com"
-    Replace: "defektive.github.io"
-    Proto: "https://"
-  - Name: "Change Path"
-    Search: "thisisatest"
-    Replace: "admin"
+    - Name: Change Host
+      Module: replacer
+      Search: http://localhost:8080
+      Replace: https://defektive.github.io/sklounst
+
+#    - Name: Change Host
+#      Module: replacer
+#      Search: test.com
+#      Replace: defektive.github.io
+#
+#    - Name: Change Path
+#      Module: replacer
+#      Search: thisisatest
+#      Replace: admin
+
+    - Name: Proxy through Path
+      Module: replacer
+      Search: ://[^/]
+      Ignore: ://([^.]\.)*google\.com
+      Replace: '{{ base32 }}'

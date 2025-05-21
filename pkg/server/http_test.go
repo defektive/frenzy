@@ -1,18 +1,35 @@
 package server
 
 import (
-	"io"
+	"bufio"
+	"bytes"
+	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"testing"
 )
 
-func setupHTTPRequest(method string, reqURL string, body io.Reader) *http.Request {
+func setupHTTPRequest(method string, reqURL string, body []byte) *http.Request {
 
-	req, err := http.NewRequest(method, reqURL, body)
+	parsed, err := url.Parse(reqURL)
 	if err != nil {
 		panic(err)
 	}
+
+	trailer := "\r\n\r\n"
+	if len(body) > 0 {
+		trailer = fmt.Sprintf("\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+	}
+
+	b := bytes.NewReader([]byte(fmt.Sprintf("%s %s HTTP/1.1\r\nHost: %s%s", method, parsed.Path, parsed.Host, trailer)))
+	br := bufio.NewReader(b)
+
+	req, err := http.ReadRequest(br)
+	if err != nil {
+		panic(err)
+	}
+
 	return req
 }
 
@@ -40,7 +57,7 @@ func TestRule_ReplaceRequest(t *testing.T) {
 				Replace: "https://defektive.github.io",
 			},
 			args: args{
-				req: setupHTTPRequest("GET", "http://defektive.github.io", nil),
+				req: setupHTTPRequest("GET", "http://defektive.github.io/", nil),
 			},
 			wantHost: "defektivse.github.io",
 		},
@@ -82,6 +99,37 @@ func Test_encodeDomain(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := encodeDomain(tt.args.domain); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("encodeDomain() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_rewriteRequest(t *testing.T) {
+	type args struct {
+		r *http.Request
+	}
+	tests := []struct {
+		name string
+		args args
+		want *http.Request
+	}{
+		{
+			name: "request gets modified",
+			args: args{
+				r: setupHTTPRequest("GET", "http://localhost:8080/", nil),
+			},
+			want: setupHTTPRequest("GET", "https://defektive.github.io/", nil),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rewriteRequest(tt.args.r)
+			//if !reflect.DeepEqual(tt.args.r, tt.want) {
+			//	t.Errorf("rewriteRequest() = %v, want %v", tt.args.r, tt.want)
+			//}
+
+			if !reflect.DeepEqual(tt.args.r.Host, tt.want.Host) {
+				t.Errorf("rewriteRequest.Host() = %v, want %v", tt.args.r.Host, tt.want.Host)
 			}
 		})
 	}
