@@ -51,9 +51,10 @@ func (s Base64Value) MarshalText() ([]byte, error) {
 }
 
 type Config struct {
-	Serve Serve  `yaml:"serve"`
-	Proxy Proxy  `yaml:"proxy"`
-	Rule  []Rule `yaml:"rule"`
+	configFilePath string
+	Serve          Serve  `yaml:"serve"`
+	Proxy          Proxy  `yaml:"proxy"`
+	Rule           []Rule `yaml:"rule"`
 }
 type Serve struct {
 	Address      string      `yaml:"address"`
@@ -85,9 +86,12 @@ func secureRandomBytes(n int) ([]byte, error) {
 
 func init() {
 	// for tests
-	//const configFile = "../../config.yaml"
-	const configFile = "config.yaml"
-	config.LoadConfig(configFile)
+	configFiles := []string{
+		"config.yaml",
+		"../../config.yaml",
+	}
+
+	config.LoadConfig(configFiles)
 
 	if len(config.Serve.SecureRandom) == 0 {
 		// no random, lets generate and save it :D
@@ -96,7 +100,7 @@ func init() {
 			log.Fatal(err)
 		}
 		config.Serve.SecureRandom = secureRandom
-		err = config.SaveConfig(configFile)
+		err = config.SaveConfig()
 		common.EnsureNotError(err)
 	}
 
@@ -106,20 +110,27 @@ func GetConfig() Config {
 	return config
 }
 
-func (c *Config) LoadConfig(file string) {
-	fileIn, err := os.ReadFile(file)
-	common.EnsureNotError(err)
+func (c *Config) LoadConfig(files []string) {
+	for _, file := range files {
+		fileIn, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
 
-	err = yaml.Unmarshal(fileIn, c)
-	common.EnsureNotError(err)
+		err = yaml.Unmarshal(fileIn, c)
+		common.EnsureNotError(err)
+
+		c.configFilePath = file
+		break
+	}
 }
 
-func (c *Config) SaveConfig(file string) error {
+func (c *Config) SaveConfig() error {
 	yamlBytes, err := yaml.Marshal(c)
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(file, yamlBytes, 0644)
+	err = os.WriteFile(c.configFilePath, yamlBytes, 0644)
 	if err != nil {
 		return err
 	}

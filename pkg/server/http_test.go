@@ -59,7 +59,7 @@ func TestRule_ReplaceRequest(t *testing.T) {
 			args: args{
 				req: setupHTTPRequest("GET", "http://defektive.github.io/", nil),
 			},
-			wantHost: "defektivse.github.io",
+			wantHost: "defektive.github.io",
 		},
 	}
 	for _, tt := range tests {
